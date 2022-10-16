@@ -1,0 +1,118 @@
+public class CaseInformationForPDF {
+    
+    Public Static Case caseRecord{get;set;}
+    public Static string recordID ;
+    Public Final  Case caseRec{get;set;}
+    Public Static List<ContentVersion> contentVersionRecords;
+    // public Static string pdfView {get;set;}
+    Public Static list<ContentDistribution> contentDistributionRecords;
+    Public Static list<ContentDistribution> contentDistributionQueriedRecords {get;set;} 
+    Public Static list<ContentDocumentLink> contentVersionRecordsDocumentLink;
+    Public Static Set<id> contentDocumentIds;
+    
+   /*public CaseInformationForPDF(ApexPages.StandardController stdController) {
+        this.caseRec = (Case)stdController.getRecord();
+        SYSTEM.DEBUG('recordIdrecordId' + caseRec);
+    } */
+    
+    @InvocableMethod(label='Get Case RecordID' description='Returns the list of account names corresponding to the specified account IDs.')
+    public Static void attachDocumentsRelatedToCase(List<Id> recordId) 
+    {
+        SYSTEM.DEBUG('recordIdrecordId' + recordId);
+       
+        Try{ 
+            caseRecord = NEW Case();
+            caseRecord = [select CaseNumber,EF_Severity__c,EF_Urgency__c,EF_Problem_Description__c,EF_Logs_Attached__c,EF_Full_Screen_Shots_Attached__c,EF_Query_Results_attached__c,EF_What_is_the_expected_function__c,
+                          EF_Steps_to_reproduce__c,EF_Are_step_screenshot_included__c,Step_screenshot_included_as__c,EF_Problem_Started__c,EF_On_Prem__c,createdby.name,KnowledgeArticleNumber__c,Article__c,EF_Server_OS_version__c,
+                          EF_Client_OS_version__c,EF_Browser_name_and_Version__c,EF_SQL_version__c,EF_Office_version__c,EF_Database_System__c,EF_How_Many_Users_Affected__c,EF_Reproducible__c,EF_If_Reproducible_yes__c,EF_Role_of_the_user_having_the_problem__c,
+                          EF_Detailed_Steps_that_lead_to_problem__c,EF_List_of_work_already_done__c,EF_Has_a_workaround_provided_to_client__c,EF_Has_the_Champion_given_authorization__c,EF_Log_Comment__c,EF_Champion_Contact__c from case where id in :recordId];
+            
+            contentVersionRecordsDocumentLink = New list<ContentDocumentLink>();
+            contentDistributionQueriedRecords = New list<ContentDistribution>();
+            contentDistributionRecords = New list<ContentDistribution>();
+            contentVersionRecords = New list<ContentVersion>();
+            SYSTEM.DEBUG('caseRecordcaseRecord' + caseRecord);
+            contentVersionRecordsDocumentLink =[SELECT id,ContentDocumentId FROM ContentDocumentLink WHERE  LinkedEntityId in:recordId];
+            contentDocumentIds = New Set<id>();
+            If(contentVersionRecordsDocumentLink.size()>0 && contentVersionRecordsDocumentLink != NULL)
+            {
+                for(ContentDocumentLink contentDistributionRecord : contentVersionRecordsDocumentLink)
+                {
+                    contentDocumentIds.add(contentDistributionRecord.ContentDocumentId);
+                }
+            }
+            If(contentDocumentIds.size()>0 && contentDocumentIds != NULL)
+            {
+                contentVersionRecords =[SELECT id,Title,ContentDocumentId,VersionData   FROM ContentVersion WHERE islatest=true and ContentDocumentId in :contentDocumentIds];
+            }
+            contentDistributionRecords = New list<ContentDistribution>();
+            
+            If(contentVersionRecords.size()>0 && contentVersionRecords !=NULL){
+                
+                for(ContentVersion cont : contentVersionRecords){
+                    ContentDistribution contentDistributionRecord = new ContentDistribution();
+                    contentDistributionRecord.name = cont.Title;
+                    contentDistributionRecord.ContentVersionId = cont.id;
+                    contentDistributionRecord.PreferencesAllowOriginalDownload = true;
+                    contentDistributionRecord.PreferencesAllowPDFDownload = true;
+                    contentDistributionRecord.PreferencesAllowViewInBrowser = true;
+                    
+                    contentDistributionRecords.add(contentDistributionRecord); 
+                }
+            }   
+        }
+        
+        catch(exception e)
+        {
+            system.debug('message -- '+e.getMessage()+ 'line. -  '+e.getLineNumber()+'cause. ' + e.getCause());
+        }
+        SYSTEM.DEBUG('contentDistributionRecords' + contentDistributionRecords);
+        SYSTEM.DEBUG('contentVersionRecordsDocumentLink' + contentVersionRecordsDocumentLink);
+       
+        SYSTEM.DEBUG('contentVersionRecords' + contentVersionRecords);
+        
+        contentDistributionQueriedRecords = New list<ContentDistribution>();
+        IF(contentDistributionRecords.size()>0 && contentDistributionRecords !=NULL)
+        {	
+            Insert contentDistributionRecords; 
+            
+            contentDistributionQueriedRecords = [SELECT DistributionPublicUrl,name,Id FROM ContentDistribution WHERE ID in :contentDistributionRecords];
+        SYSTEM.DEBUG('contentDistributionQueriedRecords' + contentDistributionQueriedRecords);
+        }
+       // ID recor = '5008D0000035Ai4QAE';
+        system.debug('enteredddd');
+        PageReference myPdf =new PageReference('/apex/LightningPDFforCase');//myPdfPage is the name of your pdf page
+        myPdf.getParameters().put('Id',recordId[0]);
+        blob pdfBody;
+        //mycontentVersionRecordsach.body = myPdf.getContentAsPdf();
+        Case ord=[select id,CaseNumber  From Case where id=:recordId];
+        String docsName='Case'+ ord.CaseNumber+' ' +DateTime.now().format()+'.pdf';
+        //Insert ContentVersion
+        ContentVersion cVersion = new ContentVersion();
+        cVersion.ContentLocation = 'S'; //S-Document is in Salesforce. E-Document is outside of Salesforce. L-Document is on a Social Network.
+        cVersion.PathOnClient = docsName;//File name with extention
+        cVersion.Origin = 'H';//C-Content Origin. H-ChcontentVersionRecordser Origin.
+        //cVersion.OwnerId = contentVersionRecordsach.OwnerId;//Owner of the file
+        cVersion.Title = docsName;//Name of the file
+        
+        if(Test.isRunningTest()) { 
+            pdfBody = blob.valueOf('Unit.Test');
+        } else {
+            pdfBody = myPdf.getContentAsPDF();
+        }
+        cVersion.VersionData = pdfBody;//contentVersionRecordsach.Body;//File content    
+        Insert cVersion;
+        SYSTEM.DEBUG('cVersion' + cVersion);
+        //After saved the Content Verison, get the ContentDocumentId
+        Id conDocument = [SELECT ContentDocumentId FROM ContentVersion WHERE Id =:cVersion.Id].ContentDocumentId;
+        SYSTEM.DEBUG('conDocument' + conDocument);
+        //Insert ContentDocumentLink
+        ContentDocumentLink contentDistributionRecordocLink = new ContentDocumentLink();
+        contentDistributionRecordocLink.ContentDocumentId = conDocument;//Add ContentDocumentId
+        contentDistributionRecordocLink.LinkedEntityId = recordID[0];///\contentVersionRecordsach.ParentId;//Add contentVersionRecordsachment parentId
+        contentDistributionRecordocLink.ShareType = 'I';//V - Viewer permission. C - Collaborator permission. I - Inferred permission.
+        contentDistributionRecordocLink.Visibility = 'InternalUsers';//AllUsers, InternalUsers, SharedUsers
+        Insert contentDistributionRecordocLink;
+        SYSTEM.DEBUG('contentDistributionRecordocLink' + contentDistributionRecordocLink);
+    }
+}
